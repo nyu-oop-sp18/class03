@@ -27,7 +27,7 @@ we want:
 
 ```scala
 def sumInts(a: Int, b: Int) = {
-  if (a < b) a + sum(f, a + 1, b) else 0
+  if (a < b) a + sumInts(a + 1, b) else 0
 }
 ```
 
@@ -36,7 +36,7 @@ the sum of the squares of the numbers in an interval `[a,b)`:
 
 ```scala
 def sumSqrs(a: Int, b: Int) = {
-  if (a < b) a * a + sum(f, a + 1, b) else 0
+  if (a < b) a * a + sumSqrs(a + 1, b) else 0
 }
 ```
 
@@ -70,8 +70,8 @@ def sumSqrs(a: Int, b: Int) = sum(square, a, b)
 
 In order to make the use of higher-order functions more convenient,
 Scala supports writing anonymous functions (aka function literals,
-closures, and lambda abstractions). In
-Scala, anonymous functions take the general form:
+closures, or lambda abstractions). In Scala, anonymous functions take
+the general form:
 
 ```scala
 (x1: T1, ..., xn: Tn) => body
@@ -651,25 +651,165 @@ functionality and so that you do not "reinvent the wheel" when you
 write your own programs.
 
 To get a glimpse of the expressive power of the functions implemented
-in the collection classes, consider the following code snippet. The
-code defines a list of integers and a list of strings and then folds
-the two lists into a single string. This string consists of a comma
-separated sequence of strings, where each string is a pair of elements
-from the two lists concatenated together using the colon symbol:
+in the collection classes, consider the following function, which
+computes the dot product of two vectors represented as lists of
+`Double` values. 
 
 ```scala
-scala> val l1 = List(1, 2, 3)
-l1: List[Int] = List(1, 2, 3)
+def dotProd(v1: List[Double], v2: List[Double]): Double =
+  (v1, v2).zipped map (_ * _) sum
+```
 
-scala> val l2 = List("a", "b","c")
-l2: List[String] = List(a, b, c)
+The code takes the two lists of doubles and first constructs a pair of
+the two lists `(v1, v2)`. Then it zips this pair of lists of doubles into a list
+of pairs of doubles `(v1, v2).zipped`. This list of pairs is then
+mapped to a list of doubles by taking the product between the values of
+each pair. The final list of double values is folded by summing up all
+values in the list. The result is the mathematical dot product of the
+represented vectors.
 
-scala> ((l1,l2) zipped) map 
-(_ + ":" + _) reduce
-(_ + ", " + _)
-res0: String = 1:a, 2:b, 3:c
+```scala
+scala> val v1 = List(3.0, 2.0, 1.0)
+v1: List[Double] = List(3.0, 2.0, 1.0)
+
+scala> val v2 = List(1.0, 2.0, 3.0)
+v1: List[Double] = List(1.0, 2.0, 3.0)
+
+scala> dotProd(v1, v2)
+res0: Double = 10.0
 ```
 
 It is instructive to re-implement this code snippet in a language such
 as Java to appreciate how much more concise and comprehensive the
-functional implementation is.
+implementation with higher-order functions is.
+
+### For Expressions
+
+The `for` expression primitive of Scala provides a generic way for
+iterating over collections of data and for building new collections
+from existing ones. The following example shows how a `for`
+expression can be used to iterate over a list `l` to build a
+new list by applying some function to the elements of `l`:
+
+```scala
+scala> val l = List(2,5) 
+l: List[Int] = List(2,5)
+
+scala> for (x <- l) yield x + 1
+res0: List[Int] = List(3,6)
+```
+When we look at the result of the above `for` expression, we
+can see that it is really computing a `map` over the
+list `l`. In fact, the Scala compiler simply rewrites the
+`for` expression
+
+```scala
+  for (x <- l) yield x + 1
+```
+
+to the following expression, which calls `map` on
+`l` with an anonymous function that is built from the
+`yield` part of the `for` expression:
+
+```scala
+  l map (x => x + 1)
+```
+
+Thus, a `for` expression is really just syntactic sugar for a
+call to `map`.
+
+One useful feature of `for` expressions is that they can be
+nested. As an example, the following nested `for` expression
+computes the "Cartesian product" of the list `l` with itself:
+
+```scala
+scala> for (x <- l; y <- l) yield (x, y)
+res1: List[(Int, Int)] = List((2,2), (2,5), (5,2), (5,5))
+```
+
+If we naively expand this `for` expression to
+`map` calls as described above, we obtain the following result:
+
+```scala
+scala> l map (x => l map (y => (x, y)))
+res2: List[List[(Int, Int)]] = List(List(2,2), List(2,5), 
+  List(5,2), List(5,5))
+```
+
+The result value `res2` is a list of list of pairs, rather
+than a list of pairs. In order to obtain `res1` from
+`res2`, we need to flatten `res2` by concatenating
+the inner lists to a single list of pairs. Incidentally, the
+`List` class provides a method `flatten` that does
+just that:
+
+```scala
+scala> res2.flatten
+res3: List[(Int, Int)] = List((2,2), (2,5), (5,2), (5,5))
+```
+
+For convenience, the class `List` also provides a method
+`flatMap` that corresponds to the composition of
+`map` and `flatten`. Using `flatMap` we
+can express the nested `for` expression that produced
+`res1` more compactly as follows:
+
+```scala
+scala> l flatMap (x => l map (y => (x, y)))
+res4: List[Int] = List((2,2), (2,5), (5,2), (5,5))
+```
+
+This translation pattern generalizes to `for`
+expressions of arbitrary nesting depth. In general, the Scala compiler
+will translate a `for` expression of the form
+
+```scala
+for (xn <- en; ...; x2 <- e2; x1 <- e1) yield e0 
+```
+
+to the expression
+
+```scala
+en flatMap (xn =>...e2 flatMap (x2 => e1 map (x1 => e0))...)
+```
+
+#### Monads
+
+The use of `for` expressions is not restricted to the
+`List` type. It works for any type that provides a
+`map` and a `flatMap` method with the appropriate
+signatures.  For example, the `Option` type also provides
+these functions and can hence be used in `for` expressions:
+
+```scala
+scala> for (x <- Some(0)) yield x + 1
+res5: Option[Int] = Some(1)
+
+scala> for (x <- None) yield x + 1
+res6: Option[Int] = None
+```
+
+We refer to a class that has appropriate `map` and
+`flatMap` methods as a *monad*. One can think of a
+monad as an abstract data type that implements a container for
+data and provides generic functions for transforming this data without
+extracting it from the container. Using `for` expressions we
+can then conveniently express a sequence of such transformations that
+operate directly on the contained data.
+
+The monad-as-container correspondence is easy to see for the type
+`List` and also for the type `Option`. The latter can be thought of as
+a list of length at most 1. In general, monads can be more abstract
+and it is sometimes more difficult to understand the nature of the
+contained data. Some of the more interesting monads provided by Scala
+are `Try` and `Future`, which we will discuss in more detail later.
+
+As an aside, the term "monad" is lent from *category theory*, a branch
+of mathematics that is concerned with the theory of mathematical
+structures and the morphisms between them. The programming language
+and category theoretic concepts of a monad are closely related. In
+category theory, monads are defined in terms of certain algebraic laws
+that relate the `flatMap` and `map` functions. For example, these laws
+codify how `map` can be expressed in terms of `flatMap` and vice
+versa. These laws also ensure that `for` expressions in Scala behave
+the way they are expected to behave.
